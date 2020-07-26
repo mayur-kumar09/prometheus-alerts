@@ -6,7 +6,7 @@ groups:
         for: 10m
         labels:
          severity: warning
-         runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+PodNotRunning
+         runbook: 
          prometheus_group: '{{ $externalLabels.prometheus_group }}'          
         annotations:
          description: Pod {{$labels.namespace}}/{{$labels.pod}} is not running
