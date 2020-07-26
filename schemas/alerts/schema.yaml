@@ -1,0 +1,23 @@
+groups: list(include('alert_group'))
+
+---
+
+alert_group:
+  name: str()
+  rules: list(include('alert'))
+
+alert:
+  alert: str()
+  expr: str()
+  for: regex('[0-9]+(?:s|m|h|d|w|y)')
+  labels: include('alert_labels')
+  annotations: include('alert_annotations')
+
+alert_labels:
+  severity: enum('critical', 'warning', 'info')
+  prometheus_group: str()
+  runbook: str()
+
+alert_annotations:
+  summary: str()
+  description: str()
