@@ -3,7 +3,7 @@ groups:
       rules:
       - alert: PodNotRunning
         expr: (kube_pod_container_status_terminated_reason {reason="Error"} or kube_pod_container_status_waiting_reason) == 1 
-        for: 10m
+        for: 1m
         labels:
          severity: warning
          runbook: url
