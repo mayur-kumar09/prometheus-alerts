@@ -1,13 +1,508 @@
 groups:
-    - name: common.prometheus
-      rules:
-      - alert: PodNotRunning
-        expr: (kube_pod_container_status_terminated_reason {reason="Error"} or kube_pod_container_status_waiting_reason) == 1 
-        for: 1m
-        labels:
-         severity: warning
-         runbook: url
-         prometheus_group: '{{ $externalLabels.prometheus_group }}'          
-        annotations:
-         description: Pod {{$labels.namespace}}/{{$labels.pod}} is not running
-         summary: Pod is not running
+- name: common.prometheus
+  rules:
+  - alert: PrometheusConfigurationReload
+    expr: prometheus_config_last_reload_successful != 1
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+PrometheusConfigurationReload"
+    annotations:
+      summary: "Prometheus configuration reload (instance {{ $labels.instance }})"
+      description: "Prometheus configuration reload error\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: PrometheusExporterDown
+    expr: up == 0
+    for: 30m 
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+PrometheusExporterDown"
+    annotations:
+      summary: "Exporter down (instance {{ $labels.instance }})"
+      description: "Prometheus exporter down: {{ $labels.instance }}"
+- name: common.node
+  rules:
+  - alert: NodeSwapUsage
+    expr: (((node_memory_SwapTotal-node_memory_SwapFree)/node_memory_SwapTotal)*100) > 75
+    for: 2m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeSwapUsage
+    annotations:
+      summary: "{{$labels.instance}}: Swap usage detected"
+      description: "{{$labels.instance}}: Swap usage usage is above 75% (current value is: {{ $value }})"
+  - alert: NodeOutofMemoryWarn
+    expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 30
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeOutofMemoryWarn"
+    annotations:
+      summary: "Out of memory (instance {{ $labels.instance }})"
+      description: "Node memory is filling up (< 30% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeOutofMemoryCritical
+    expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100 < 10
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeOutofMemoryCritical"
+    annotations:
+      summary: "Out of memory (instance {{ $labels.instance }})"
+      description: "Node memory is filling up (< 10% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeUnusualNetworkThroughputIn
+    expr: sum by (instance) (irate(node_network_receive_bytes_total[2m])) / 1024 / 1024 > 250
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeUnusualNetworkThroughputIn"
+    annotations:
+      summary: "Unusual network throughput in (instance {{ $labels.instance }})"
+      description: "Host network interfaces are probably receiving too much data (> 250 MB/s)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeUnusualNetworkThroughputOut
+    expr: sum by (instance) (irate(node_network_transmit_bytes_total[2m])) / 1024 / 1024 > 250
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeUnusualNetworkThroughputOut"
+    annotations:
+      summary: "Unusual network throughput out (instance {{ $labels.instance }})"
+      description: "Host network interfaces are probably sending too much data (> 250 MB/s)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}" 
+  - alert: NodeUnusualDiskReadRate
+    expr: sum by (instance) (irate(node_disk_read_bytes_total[2m])) / 1024 / 1024 > 250
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeUnusualDiskReadRate"
+    annotations:
+      summary: "Unusual disk read rate (instance {{ $labels.instance }})"
+      description: "Disk is probably reading too much data (> 50 MB/s)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeUnusualDiskWriteRate
+    expr: sum by (instance) (irate(node_disk_written_bytes_total[2m])) / 1024 / 1024 > 250
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeUnusualDiskWriteRate"
+    annotations:
+      summary: "Unusual disk write rate (instance {{ $labels.instance }})"
+      description: "Disk is probably writing too much data (> 250 MB/s)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeOutOfDiskSpaceWarning
+    expr: node_filesystem_free_bytes{mountpoint ="/rootfs"} / node_filesystem_size_bytes{mountpoint ="/rootfs"} * 100 < 30
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeOutOfDiskSpaceWarning"
+    annotations:
+      summary: "Out of disk space (instance {{ $labels.instance }})"
+      description: "Disk is almost full (< 30% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeOutOfDiskSpaceCritical
+    expr: node_filesystem_free_bytes{mountpoint ="/rootfs"} / node_filesystem_size_bytes{mountpoint ="/rootfs"} * 100 < 30
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeOutOfDiskSpaceCritical"
+    annotations:
+      summary: "Out of disk space (instance {{ $labels.instance }})"
+      description: "Disk is almost full (< 10% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeHighCpuLoadWarning
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeHighCpuLoadWarning
+    annotations:
+      summary: "High CPU load (instance {{ $labels.instance }})"
+      description: "CPU load is > 70%\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: NodeHighCpuLoadCritical
+    expr: 100 - (avg by(instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeHighCpuLoadCritical
+    annotations:
+      summary: "High CPU load (instance {{ $labels.instance }})"
+      description: "CPU load is > 90%\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: KubernetesNodeManyNotReady
+    expr: count(kube_node_status_condition{condition="Ready",status="true"} == 0) > 2
+    for: 1h
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: critical
+      context: node
+      meta: "{{ $labels.instance }}"
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesNodeManyNotReady
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      description: Many Nodes are NotReady
+      summary: Many ({{$value}}) nodes are NotReady for more than an hour
+  - alert: KubernetesNodeNotReady
+    expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+    for: 30m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: warning
+      context: node
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesNodeNotReady
+    annotations:
+      description: Node status is NotReady
+      summary: Node {{$labels.node}} is NotReady for more than an hour
+  - alert: NodeResourceAlert
+    expr: kube_node_status_condition{status="true",condition!="Ready"} > 0
+    for: 5m
+    labels:
+      tier: kubernetes
+      service: node
+      severity: critical
+      context: node
+      meta: "{{ $labels.node }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+NodeResourceAlert
+    annotations:
+      summary: "{{$labels.condition}} Node Alert"
+      description: "Node {{$labels.node}} is having {{$labels.condition}} condition"
+  - alert: KubernetesNodeClockDrift
+    expr: abs(ntp_drift_seconds) > 0.3
+    for: 10m
+    labels:
+      tier: kubernetes
+      service: node
+      severity: warning
+      context: availability
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesNodeClockDrift
+    annotations:
+      description: High NTP drift
+      summary: The clock on node {{ $labels.instance }} is more than 300ms apart from its NTP server. This can cause service degradation in Swift
+- name: common.kubelet
+  rules:
+  - alert: KubeletVolumeOutOfDiskSpaceWarning
+    expr: kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes * 100 < 30
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubeletVolumeOutOfDiskSpaceWarning"
+    annotations:
+      summary: "Volume out of disk space (instance {{ $labels.instance }})"
+      description: "Volume is almost full (< 30% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: KubeletVolumeOutOfDiskSpaceCritical
+    expr: kubelet_volume_stats_available_bytes / kubelet_volume_stats_capacity_bytes * 100 < 10
+    for: 5m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubeletVolumeOutOfDiskSpaceCritical"
+    annotations:
+      summary: "Volume out of disk space (instance {{ $labels.instance }})"
+      description: "Volume is almost full (< 10% left)\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+- name: common.pod
+  rules:      
+  - alert: StatefulsetDown
+    expr: (kube_statefulset_status_replicas_ready / kube_statefulset_status_replicas_current) != 1
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+StatefulsetDown"
+    annotations:
+      summary: "StatefulSet replica down (instance {{ $labels.instance }})"
+      description: "A StatefulSet replica went down\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: DaemonsetDown
+    expr: (kube_daemonset_status_desired_number_scheduled / kube_daemonset_status_current_number_scheduled) != 1
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+DaemonsetDown"
+    annotations:
+      summary: "DaemonSet replica down (instance {{ $labels.instance }})"
+      description: "A DaemonSet replica went down\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: ReplicasetDown
+    expr: (kube_replicaset_spec_replicas != 0) and (kube_replicaset_status_ready_replicas / kube_replicaset_spec_replicas != 1)
+    for: 15m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+ReplicasetDown"
+    annotations:
+      summary: "ReplicaSet replica down (instance {{ $labels.instance }})"
+      description: "A ReplicaSet replica went down\n VALUE = {{ $value }}\n LABELS: {{ $labels }}"
+  - alert: KubernetesDeploymentInsufficientReplicas
+    expr: sum(kube_deployment_status_replicas) by (namespace,deployment) != sum(kube_deployment_spec_replicas) by (namespace,deployment)
+    for: 10m
+    labels:
+      tier: kubernetes
+      service: deployment
+      severity: warning
+      context: deployment
+      meta: "{{ $labels.deployment }}"
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesDeploymentInsufficientReplicas
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      description: Deployment {{ $labels.namespace }}/{{ $labels.deployment }} has {{ $value }} replica available, which is less then desired
+      summary: Deployment has less than desired replicas since 10m
+  - alert: DaemonSetsMissScheduled
+    expr: kube_daemonset_status_number_misscheduled > 0
+    for: 10m
+    labels:
+      severity: warning
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+DaemonSetsMissScheduled
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      description: A number of daemonsets are running where they are not supposed to run.
+      summary: Daemonsets are not scheduled correctly
+  - alert: PodFrequentlyRestarting
+    expr: increase(kube_pod_container_status_restarts_total[1h]) > 5
+    for: 10m
+    labels:
+      severity: warning
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+PodFrequentlyRestarting
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'          
+    annotations:
+      description: Pod {{$labels.namespace}}/{{$labels.pod}} is was restarted {{$value}} times within the last hour
+      summary: Pod is restarting frequently
+  - alert: PodNotRunning
+    expr: (kube_pod_container_status_terminated_reason {reason="Error"} or kube_pod_container_status_waiting_reason) == 1 
+    for: 5m
+    labels:
+      severity: warning
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+PodNotRunning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'          
+    annotations:
+      description: Pod {{$labels.namespace}}/{{$labels.pod}} is not running
+      summary: Pod is not running
+  - alert: TillerPodNotAvailable
+    expr: kube_deployment_status_replicas_available {deployment="tiller-deploy"} == 0
+    for: 5m
+    labels:
+      severity: critical
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+TillerPodNotAvailable
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'          
+    annotations:
+      description: Tiller Pod of Namespace {{$labels.namespace}} is not running.
+      summary: Tiller Pod is not avaialbe or its deployment has insufficent replicas.
+  - alert: PrometheusStatefulsetDown
+    expr: (kube_statefulset_status_replicas_ready{statefulset="prometheus-server"} / kube_statefulset_status_replicas{statefulset="prometheus-server"}) != 1
+    for: 10m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+PrometheusStatefulsetDown"
+    annotations:
+      summary: "Prometheus StatefulSet replica down"
+      description: "Prometheus StatefulSet replica went down VALUE = {{ $value }}"
+- name: common.availability
+  rules:       
+  - alert: High5xxCodesWarning
+    expr: (sum(rate(nginx_ingress_controller_requests{status!~"[5].*"}[1d])) / sum(rate(nginx_ingress_controller_requests[1d]))) < 0.9
+    for: 5m
+    labels:
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+High5xxCodesWarning"
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      availability: '{{ $value }}'
+      summary: "High number of 5xx codes (10%) seen across cluster"
+      description: "A high number (10%) of 5xx responses from the ingress controller have been seen across the entire cluster." 
+  - alert: High5xxCodesCritical
+    expr: (sum(rate(nginx_ingress_controller_requests{status!~"[5].*"}[1d])) / sum(rate(nginx_ingress_controller_requests[1d]))) < 0.75
+    for: 5m
+    labels:
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+High5xxCodesCritical"
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      availability: '{{ $value }}'
+      summary: "High number of 5xx codes (25%) seen across cluster"
+      description: "A high number (25%) of 5xx responses from the ingress controller have been seen across the entire cluster."
+  - alert: IngressControllerDown
+    expr: count(kube_pod_info{pod=~"(.*)nginx-ingress-controller(.*)", namespace="ingress"}) < 1 
+    for: 5m
+    labels:
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+IngressControllerDown"
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      summary: "Ingress controller is down"
+      description: "The nginx ingress controller in the ingress namespace is unavailable"
+  - alert: SSlCertExpiringSoonInfo
+    expr: probe_ssl_earliest_cert_expiry{job='blackbox'} - time() < 86400 * 30
+    for: 10m
+    annotations:
+      description: This is an alert for the SSLCertExpiring soon (30d).
+      summary: Alerting SSLExpiringSoon, 30 days (should auto-renew though so no action needed)
+    labels:
+      severity: info
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Certificate+Renewal"
+  - alert: SSlCertExpiringSoonWarning
+    expr: probe_ssl_earliest_cert_expiry{job='blackbox'} - time() < 86400 * 15
+    for: 10m
+    annotations:
+      description: This is an alert for the SSLCertExpiring soon (15d).
+      summary: Alerting SSLExpiringSoon, 15 days (is cert-manager working?)
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Certificate+Renewal"
+  - alert: SSlCertExpiringSoonCritical
+    expr: probe_ssl_earliest_cert_expiry{job='blackbox'} - time() < 86400 * 1
+    for: 10m
+    annotations:
+      description: This is an alert for the SSLCertExpiring soon.
+      summary: Alerting SSLExpiringSoon, 1 day (need TLS Renewal)
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Certificate+Renewal"
+  - alert: SSLCertInvalid
+    expr: probe_http_ssl{job="blackbox"} == 0 
+    for: 5m 
+    annotations:
+      description: SSL Cert is invalid
+      summary: The SSL blackbox probe has failed on {{ $labels.instance }} for 5 minutes.
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: "https://confluence-engineering.dentsuaegis.com/display/GD/Manual+TLS+Renewal"
+      instance: '{{ $labels.instance }}'
+  - alert: Nginx_Low_Availability
+    expr: >
+     abs(
+       (
+         job:nginx_5xx_response:rate5m - job:nginx_5xx_response:rate5m:avg_over_time_1d
+       ) / job:nginx_5xx_response:rate5m:stddev_over_time_1d
+     ) > 1.2 * job:nginx_5xx_response:rate5m:avg_over_time_1d
+    for: 15m
+    labels:
+      severity: critical
+      namespace: '{{ $labels.namespace }}'
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: 'https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+High5xxCodesCritical'
+    annotations:
+      availability: '{{ $value }}'
+      summary: 'Availability SLI (99.5%) has been breached for the {{ $labels.namespace }} environment in {{ $externalLabels.prometheus_group }}.'
+      description: The percentage of 5xx error codes seen on nginx response codes has dropped below acceptable (SLI) levels.
+- name: common.job
+  rules:
+  - alert: CronJobFailed
+    expr: ((time() - kube_job_status_start_time) < 600) and (kube_job_status_failed > 0)
+    for: 5m
+    labels:
+      severity: warning
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+CronJobFailed
+    annotations:
+      description: "Job {{$labels.namespace}}/{{$labels.exported_job}} failed to complete"
+      summary: "Job failed"
+- name: common.kubernetes
+  rules:
+  - alert: KubernetesSchedulerDown
+    expr: count(up{job="kube-system/scheduler"} == 1) == 0
+    for: 5m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: critical
+      context: scheduler
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesSchedulerDown
+    annotations:
+      description: Scheduler is down
+      summary: No scheduler is running. New pods are not being assigned to nodes!
+  - alert: KubernetesControllerManagerDown
+    expr: count(up{job="kube-system/controller-manager"} == 1) == 0
+    for: 5m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: critical
+      context: controller-manager
+      dashboard: kubernetes-health
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: docs/support/playbook/kubernetes/k8s_controller_manager_down.html 
+    annotations:
+      description: No controller-manager is running. Deployments and replication controllers are not making progress
+      summary: Controller manager is down
+  - alert: KubernetesNodesTooManyOpenFiles
+    expr: 100*process_open_fds{job="kubernetes-nodes"}/process_max_fds{job="kubernetes-nodes"} > 50
+    for: 10m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: warning
+      context: system
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesNodesTooManyOpenFiles
+    annotations:
+      description: "{{ $labels.job }} on {{ $labels.instance }} is using {{ $value }}% of the available file/socket descriptors"
+      summary: Too many open file descriptors
+  - alert: KubernetesPVCPendingOrLost
+    expr: kube_persistentvolumeclaim_status_phase{phase=~"Pending|Lost"} == 1
+    for: 15m
+    labels:
+      tier: kubernetes
+      service: k8s
+      severity: warning
+      context: pvc
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesPVCPendingOrLost
+    annotations:
+      description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} stuck in phase {{ $labels.phase }} since 15 min"
+      summary: "PVC stuck in phase {{ $labels.phase }}"
+  - alert: KubernetesNodeKernelDeadlock
+    expr: kube_node_status_condition{condition="KernelDeadlock",status="true"} == 1
+    for: 96h
+    labels:
+      tier: kubernetes
+      service: node
+      severity: warning
+      context: availability
+      meta: "{{ $labels.instance }}"
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesNodeKernelDeadlock
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+    annotations:
+      description: Node kernel has deadlock
+      summary: Permanent kernel deadlock on {{$labels.node}}. Please drain and reboot node
+  - alert: KubernetesNodeHighNumberOfOpenConnections
+    expr: node_netstat_Tcp_CurrEstab > 20000
+    for: 15m
+    labels:
+      tier: kubernetes
+      service: node
+      severity: warning
+      context: availability
+      meta: "{{ $labels.instance }}"
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesNodeHighNumberOfOpenConnections
+    annotations:
+      description: High number of open TCP connections
+      summary: The node {{ $labels.instance }} has more than 20000 active TCP connections. The maximally possible amount is 32768 connections
+  - alert: KubernetesApiServerDown
+    expr: up {job="kubernetes-apiservers"} == 0
+    for: 10m
+    labels:
+      severity: critical
+      prometheus_group: '{{ $externalLabels.prometheus_group }}'
+      runbook: https://confluence-engineering.dentsuaegis.com/display/GD/Alert%3A+KubernetesApiServerDown
+    annotations:
+      description: Kube Api Server is down.
+      summary: Kube Api Server is down.
+
