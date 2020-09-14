@@ -1,6 +1,4 @@
-# sre-prometheus-alerts
-
-![](https://https://github.com/mayur-kumar09/prometheus-alerts/workflows/CI/badge.svg)
+# prometheus-alerts
 
 Successive Technologies uses Prometheus as the primary alert tool. This repository aims to make defining and deploying new alerts as frictionless as possible.
 
